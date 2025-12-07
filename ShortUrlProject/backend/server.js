@@ -11,16 +11,23 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Configurare CORS (Permite frontend-ului să vorbească cu serverul)
 app.use(cors());
 app.use(express.json());
-app.set('trust proxy', true); // Necesar pentru IP real
+app.set('trust proxy', true); // Critic pentru Render ca să vadă IP-ul real
 
+// Conexiune Redis
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-// --- SCURTARE URL ---
+// --- RUTA 0: Confirmare că serverul merge (Fix pentru "Cannot GET /") ---
+app.get('/', (req, res) => {
+  res.send('✅ Backend-ul este ONLINE! Te rog folosește Frontend-ul pentru a scurta link-uri.');
+});
+
+// --- RUTA 1: Scurtare URL ---
 app.post('/api/shorten', async (req, res) => {
   try {
     const { longUrl } = req.body;
@@ -41,11 +48,12 @@ app.post('/api/shorten', async (req, res) => {
 
     res.json({ shortCode });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: "Eroare internă la server." });
   }
 });
 
-// --- STATISTICI (Aici era problema posibilă) ---
+// --- RUTA 2: Statistici ---
 app.get('/api/stats/:code', async (req, res) => {
   const { code } = req.params;
   
@@ -54,14 +62,12 @@ app.get('/api/stats/:code', async (req, res) => {
 
   const visits = await redis.get(`stats:${code}`);
   
-  // Luăm istoricul (dacă există). Dacă nu, returnăm array gol []
+  // Extragem istoricul (lista de vizite)
   const historyRaw = await redis.lrange(`history:${code}`, 0, 49);
   let history = [];
-  
   try {
       history = historyRaw.map(item => JSON.parse(item));
   } catch (e) {
-      console.error("Eroare la parsarea istoricului:", e);
       history = [];
   }
 
@@ -72,32 +78,31 @@ app.get('/api/stats/:code', async (req, res) => {
   });
 });
 
-// --- REDIRECTARE + TRACKING ---
+// --- RUTA 3: Redirectare + Tracking ---
 app.get('/:code', async (req, res) => {
   const { code } = req.params;
   const longUrl = await redis.get(`short:${code}`);
 
   if (longUrl) {
-    // Incrementăm vizitele
+    // 1. Numărăm vizita
     await redis.incr(`stats:${code}`);
 
-    // Tracking IP și Locație
+    // 2. Aflăm IP și Locație
     let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'Unknown';
     if (ip && ip.includes(',')) ip = ip.split(',')[0].trim();
 
     let country = "Unknown";
     let city = "Unknown";
 
-    // Încercăm să luăm locația (doar dacă nu e localhost)
     if (ip !== '127.0.0.1' && ip !== '::1' && ip !== 'Unknown') {
         try {
-            const geoRes = await axios.get(`https://ipapi.co/${ip}/json/`, { timeout: 2000 });
+            const geoRes = await axios.get(`https://ipapi.co/${ip}/json/`, { timeout: 1500 });
             if (!geoRes.data.error) {
                 country = geoRes.data.country_name || "Unknown";
                 city = geoRes.data.city || "Unknown";
             }
         } catch (e) {
-            console.log("GeoIP timeout/error (neignorat)");
+            console.log("GeoIP skip");
         }
     }
 
@@ -120,5 +125,5 @@ app.get('/:code', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Backend running on http://localhost:${PORT}`);
+  console.log(`Backend running on port ${PORT}`);
 });

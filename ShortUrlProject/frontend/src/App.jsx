@@ -9,9 +9,10 @@ import {
 import copy from 'copy-to-clipboard';
 import { format } from 'date-fns';
 
-const API_BASE = "http://localhost:5000"; 
+// ✅ URL-UL TĂU DE RENDER (Verifică să fie corect!)
+const API_BASE = "https://proiectdsw.onrender.com"; 
 
-// --- Componente UI Reutilizabile ---
+// --- COMPONENTE UI ---
 
 const Loader = () => (
   <div className="flex justify-center p-2">
@@ -21,9 +22,7 @@ const Loader = () => (
 
 const Background = () => (
   <div className="fixed inset-0 z-0 overflow-hidden bg-slate-900">
-    {/* Gradient General */}
     <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900"></div>
-    {/* Blobs Animate */}
     <div className="absolute top-0 -left-4 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
     <div className="absolute top-0 -right-4 w-72 h-72 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
     <div className="absolute -bottom-8 left-20 w-72 h-72 bg-pink-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000"></div>
@@ -36,11 +35,10 @@ const Navbar = () => (
       <Zap className="text-yellow-400 fill-yellow-400" />
       Quick<span className="text-indigo-400">Link</span>
     </Link>
-    <a href="#" className="text-slate-400 hover:text-white text-sm transition">Docs</a>
   </nav>
 );
 
-// --- PAGINA 1: HOME ---
+// --- PAGINA HOME ---
 
 function Home() {
   const [longUrl, setLongUrl] = useState('');
@@ -70,7 +68,7 @@ function Home() {
       }
     } catch (err) {
       console.error(err);
-      setError("Serverul nu răspunde. Verifică backend-ul.");
+      setError("Serverul nu răspunde. Verifică Render.");
     }
     setLoading(false);
   };
@@ -82,20 +80,20 @@ function Home() {
   };
 
   return (
-    <div className="relative z-10 w-full max-w-xl px-4">
+    <div className="relative z-10 w-full max-w-xl px-4 flex flex-col items-center">
       <div className="text-center mb-10">
         <h1 className="text-5xl font-extrabold text-white mb-4 tracking-tight drop-shadow-lg">
           Scurtează link-uri <br/>
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">
-            la viteza luminii
+            inteligent & rapid
           </span>
         </h1>
         <p className="text-slate-400 text-lg">
-          Transformă URL-urile lungi și urâte în link-uri scurte, sigure și ușor de urmărit.
+          Transformă URL-urile lungi în link-uri scurte, sigure și ușor de urmărit.
         </p>
       </div>
 
-      <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-2xl animate-fade-in">
+      <div className="w-full bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-2xl animate-fade-in">
         <form onSubmit={handleSubmit} className="relative group mb-6">
           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
             <LinkIcon size={20} />
@@ -103,13 +101,13 @@ function Home() {
           <input 
             type="text" 
             className="w-full py-4 pl-12 pr-36 rounded-2xl bg-slate-900/50 border border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-white placeholder-slate-500 outline-none transition-all shadow-inner"
-            placeholder="https://exemplu.com/pagina-foarte-lunga..."
+            placeholder="Lipește link-ul lung aici..."
             value={longUrl}
             onChange={(e) => setLongUrl(e.target.value)}
           />
           <button 
             disabled={loading}
-            className="absolute right-2 top-2 bottom-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 rounded-xl transition-all shadow-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="absolute right-2 top-2 bottom-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 rounded-xl transition-all shadow-lg flex items-center gap-2 disabled:opacity-50"
           >
             {loading ? <Loader /> : <>Scurtează <ArrowRight size={16} /></>}
           </button>
@@ -122,12 +120,12 @@ function Home() {
         )}
 
         {shortCode && (
-          <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 animate-fade-in">
+          <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 animate-fade-in-up">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
               <div className="w-full overflow-hidden text-center sm:text-left">
-                <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Link-ul tău:</p>
+                <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Link generat:</p>
                 <a href={`${API_BASE}/${shortCode}`} target="_blank" className="text-xl font-bold text-indigo-400 hover:text-indigo-300 truncate block transition">
-                  {API_BASE.replace('http://', '')}/{shortCode}
+                  {API_BASE.replace('https://', '')}/{shortCode}
                 </a>
               </div>
               <button 
@@ -144,7 +142,7 @@ function Home() {
                  <QRCodeCanvas value={`${API_BASE}/${shortCode}`} size={80} />
                </div>
                <div className="text-center sm:text-right">
-                  <p className="text-slate-300 text-sm mb-3">Vezi cine a dat click și de unde.</p>
+                  <p className="text-slate-300 text-sm mb-3">Vrei să vezi cine a dat click?</p>
                   <Link to={`/stats/${shortCode}`} className="inline-flex items-center gap-2 text-indigo-400 hover:text-indigo-300 font-semibold transition group">
                     <BarChart3 size={18} /> Statistici Detaliate 
                     <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform"/>
@@ -154,17 +152,11 @@ function Home() {
           </div>
         )}
       </div>
-      
-      <div className="mt-8 flex justify-center gap-8 text-slate-500 text-sm font-medium">
-        <span className="flex items-center gap-2"><ShieldCheck size={16}/> Secure</span>
-        <span className="flex items-center gap-2"><Zap size={16}/> Rapid</span>
-        <span className="flex items-center gap-2"><Globe size={16}/> Global</span>
-      </div>
     </div>
   );
 }
 
-// --- PAGINA 2: STATISTICI ---
+// --- PAGINA STATS ---
 
 function Stats() {
   const { code } = useParams();
@@ -175,7 +167,7 @@ function Stats() {
   useEffect(() => {
     fetch(`${API_BASE}/api/stats/${code}`)
       .then(res => {
-          if (!res.ok) throw new Error("Link inexistent.");
+          if (!res.ok) throw new Error("Link-ul nu a fost găsit.");
           return res.json();
       })
       .then(d => { setData(d); setLoading(false); })
@@ -200,7 +192,6 @@ function Stats() {
       </Link>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        {/* Card Total Vizite */}
         <div className="bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-2xl flex items-center gap-4">
             <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-xl"><MousePointer2 size={28}/></div>
             <div>
@@ -209,26 +200,24 @@ function Stats() {
             </div>
         </div>
 
-        {/* Card Info Link */}
         <div className="md:col-span-2 bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-2xl flex flex-col justify-center">
-             <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Link Original</p>
+             <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Destinație</p>
              <a href={data.longUrl} target="_blank" className="text-lg font-medium text-white hover:text-indigo-400 truncate transition flex items-center gap-2">
                  <LinkIcon size={16} /> {data.longUrl}
              </a>
         </div>
       </div>
 
-      {/* Tabel Complex */}
       <div className="bg-slate-900/50 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
           <div className="p-5 border-b border-white/5 flex justify-between items-center bg-white/5">
              <h3 className="font-bold text-white flex items-center gap-2"><Clock size={18} className="text-indigo-400"/> Istoric Trafic</h3>
              <span className="text-xs font-bold bg-green-500/20 text-green-400 px-2 py-1 rounded border border-green-500/20">LIVE</span>
           </div>
           
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-96 overflow-y-auto">
              <table className="w-full text-left border-collapse">
-               <thead>
-                 <tr className="bg-black/20 text-slate-400 text-xs uppercase tracking-wider">
+               <thead className="bg-black/20 text-slate-400 text-xs uppercase tracking-wider sticky top-0 backdrop-blur-md">
+                 <tr>
                    <th className="p-4 font-semibold">IP Address</th>
                    <th className="p-4 font-semibold">Locație</th>
                    <th className="p-4 font-semibold">Data & Ora</th>
@@ -260,7 +249,7 @@ function Stats() {
                  ) : (
                    <tr>
                      <td colSpan="4" className="p-10 text-center text-slate-500">
-                        Niciun click înregistrat încă. Trimite link-ul prietenilor!
+                        Niciun click înregistrat încă.
                      </td>
                    </tr>
                  )}
@@ -268,36 +257,24 @@ function Stats() {
              </table>
           </div>
       </div>
-      
-      <div className="mt-8 mb-8 bg-indigo-900/20 border border-indigo-500/20 p-4 rounded-xl flex items-center gap-4">
-         <div className="bg-white p-1 rounded"><QRCodeCanvas value={`${API_BASE}/${code}`} size={50} /></div>
-         <div>
-            <p className="text-white font-bold text-sm">Cod QR Permanent</p>
-            <p className="text-slate-400 text-xs">Poți folosi acest cod pe materiale printate sau prezentări.</p>
-         </div>
-      </div>
     </div>
   );
 }
 
-// --- APP ROOT ---
+// --- MAIN LAYOUT (Centrare Globală) ---
 
 export default function App() {
   return (
     <BrowserRouter>
-      {/* Wrapper Principal - Aici e magia centrării */}
       <div className="relative min-h-screen flex flex-col items-center justify-center font-sans selection:bg-indigo-500 selection:text-white">
         <Background />
         <Navbar />
-        
-        {/* Rutele sunt randate aici, mereu centrate */}
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/stats/:code" element={<Stats />} />
         </Routes>
-
         <footer className="absolute bottom-4 text-slate-600 text-xs z-10">
-            © 2024 QuickLink Pro. Secure URL Shortener.
+            © 2024 QuickLink Pro.
         </footer>
       </div>
     </BrowserRouter>
