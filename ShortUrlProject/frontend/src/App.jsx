@@ -3,49 +3,55 @@ import { BrowserRouter, Routes, Route, Link, useParams } from 'react-router-dom'
 import { QRCodeCanvas } from 'qrcode.react';
 import { 
   Copy, ArrowRight, Link as LinkIcon, BarChart3, 
-  CheckCircle, AlertTriangle, Globe, Clock, MapPin, 
-  MousePointer2, Zap, ShieldCheck 
+  CheckCircle, AlertTriangle, Clock, MapPin, 
+  MousePointer2, Zap, Trash2, ExternalLink
 } from 'lucide-react';
 import copy from 'copy-to-clipboard';
 import { format } from 'date-fns';
 
-// ✅ URL-UL TĂU DE RENDER (Verifică să fie corect!)
+// ✅ Link-ul tău de Render
 const API_BASE = "https://proiectdsw.onrender.com"; 
 
-// --- COMPONENTE UI ---
-
+// --- Componente UI ---
 const Loader = () => (
   <div className="flex justify-center p-2">
-    <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+    <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
   </div>
 );
 
 const Background = () => (
   <div className="fixed inset-0 z-0 overflow-hidden bg-slate-900">
     <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900"></div>
-    <div className="absolute top-0 -left-4 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
-    <div className="absolute top-0 -right-4 w-72 h-72 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
-    <div className="absolute -bottom-8 left-20 w-72 h-72 bg-pink-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000"></div>
+    <div className="absolute top-0 -left-4 w-96 h-96 bg-purple-500 rounded-full mix-blend-multiply filter blur-[100px] opacity-20 animate-blob"></div>
+    <div className="absolute top-0 -right-4 w-96 h-96 bg-indigo-500 rounded-full mix-blend-multiply filter blur-[100px] opacity-20 animate-blob animation-delay-2000"></div>
+    <div className="absolute -bottom-8 left-20 w-96 h-96 bg-pink-500 rounded-full mix-blend-multiply filter blur-[100px] opacity-20 animate-blob animation-delay-4000"></div>
   </div>
 );
 
 const Navbar = () => (
-  <nav className="absolute top-0 left-0 w-full p-6 flex justify-between items-center z-20">
-    <Link to="/" className="text-2xl font-bold text-white tracking-tighter flex items-center gap-2">
-      <Zap className="text-yellow-400 fill-yellow-400" />
+  <nav className="absolute top-0 left-0 w-full p-8 flex justify-between items-center z-20">
+    <Link to="/" className="text-3xl font-extrabold text-white tracking-tighter flex items-center gap-3">
+      <Zap className="text-yellow-400 fill-yellow-400" size={32} />
       Quick<span className="text-indigo-400">Link</span>
     </Link>
   </nav>
 );
 
 // --- PAGINA HOME ---
-
 function Home() {
   const [longUrl, setLongUrl] = useState('');
   const [shortCode, setShortCode] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // FIX: Folosim sessionStorage (se șterge când închizi browserul, dar rămâne la navigare)
+  useEffect(() => {
+    const savedCode = sessionStorage.getItem('lastShortCode');
+    const savedUrl = sessionStorage.getItem('lastLongUrl');
+    if (savedCode) setShortCode(savedCode);
+    if (savedUrl) setLongUrl(savedUrl);
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -63,6 +69,8 @@ function Home() {
       
       if (res.ok) {
         setShortCode(data.shortCode);
+        sessionStorage.setItem('lastShortCode', data.shortCode);
+        sessionStorage.setItem('lastLongUrl', longUrl);
       } else {
         setError(data.error || 'Eroare server.');
       }
@@ -73,6 +81,13 @@ function Home() {
     setLoading(false);
   };
 
+  const handleReset = () => {
+    setLongUrl('');
+    setShortCode(null);
+    sessionStorage.removeItem('lastShortCode');
+    sessionStorage.removeItem('lastLongUrl');
+  };
+
   const handleCopy = () => {
     copy(`${API_BASE}/${shortCode}`);
     setCopied(true);
@@ -80,84 +95,103 @@ function Home() {
   };
 
   return (
-    <div className="relative z-10 w-full max-w-xl px-4 flex flex-col items-center">
-      <div className="text-center mb-10">
-        <h1 className="text-5xl font-extrabold text-white mb-4 tracking-tight drop-shadow-lg">
-          Scurtează link-uri <br/>
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">
-            inteligent & rapid
-          </span>
-        </h1>
-        <p className="text-slate-400 text-lg">
-          Transformă URL-urile lungi în link-uri scurte, sigure și ușor de urmărit.
-        </p>
-      </div>
-
-      <div className="w-full bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-2xl animate-fade-in">
-        <form onSubmit={handleSubmit} className="relative group mb-6">
-          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-            <LinkIcon size={20} />
+    <div className="relative z-10 w-full max-w-4xl px-6 flex flex-col items-center">
+      
+      {!shortCode ? (
+        <>
+          <div className="text-center mb-12">
+            <h1 className="text-6xl md:text-7xl font-black text-white mb-6 tracking-tight drop-shadow-2xl">
+              Scurtează <br/>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">
+                GIGANTIC
+              </span>
+            </h1>
+            <p className="text-slate-300 text-2xl font-light">
+              Cel mai simplu mod de a gestiona link-uri lungi.
+            </p>
           </div>
-          <input 
-            type="text" 
-            className="w-full py-4 pl-12 pr-36 rounded-2xl bg-slate-900/50 border border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-white placeholder-slate-500 outline-none transition-all shadow-inner"
-            placeholder="Lipește link-ul lung aici..."
-            value={longUrl}
-            onChange={(e) => setLongUrl(e.target.value)}
-          />
-          <button 
-            disabled={loading}
-            className="absolute right-2 top-2 bottom-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 rounded-xl transition-all shadow-lg flex items-center gap-2 disabled:opacity-50"
-          >
-            {loading ? <Loader /> : <>Scurtează <ArrowRight size={16} /></>}
-          </button>
-        </form>
 
-        {error && (
-          <div className="bg-red-500/10 border border-red-500/20 text-red-200 p-4 rounded-xl flex items-center justify-center gap-2 mb-6">
-            <AlertTriangle size={18} /> {error}
-          </div>
-        )}
-
-        {shortCode && (
-          <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 animate-fade-in-up">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
-              <div className="w-full overflow-hidden text-center sm:text-left">
-                <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Link generat:</p>
-                <a href={`${API_BASE}/${shortCode}`} target="_blank" className="text-xl font-bold text-indigo-400 hover:text-indigo-300 truncate block transition">
-                  {API_BASE.replace('https://', '')}/{shortCode}
-                </a>
+          <div className="w-full bg-white/5 backdrop-blur-2xl border border-white/10 p-10 rounded-[2.5rem] shadow-2xl animate-fade-in">
+            <form onSubmit={handleSubmit} className="relative group">
+              <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none text-slate-400">
+                <LinkIcon size={32} />
               </div>
+              <input 
+                type="text" 
+                className="w-full py-8 pl-20 pr-48 rounded-3xl bg-slate-900/60 border-2 border-slate-700 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 text-white placeholder-slate-500 outline-none transition-all shadow-inner text-2xl"
+                placeholder="https://..."
+                value={longUrl}
+                onChange={(e) => setLongUrl(e.target.value)}
+              />
               <button 
-                onClick={handleCopy}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all w-full sm:w-auto justify-center ${copied ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-white/10 text-white hover:bg-white/20 border border-white/10'}`}
+                disabled={loading}
+                className="absolute right-3 top-3 bottom-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-10 rounded-2xl transition-all shadow-lg flex items-center gap-3 disabled:opacity-50 text-xl"
               >
-                {copied ? <CheckCircle size={18} /> : <Copy size={18} />}
-                {copied ? 'Copiat' : 'Copiază'}
+                {loading ? <Loader /> : <>SCURTEAZĂ <ArrowRight size={24} /></>}
               </button>
-            </div>
-
-            <div className="pt-6 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-6">
-               <div className="bg-white p-2 rounded-xl">
-                 <QRCodeCanvas value={`${API_BASE}/${shortCode}`} size={80} />
-               </div>
-               <div className="text-center sm:text-right">
-                  <p className="text-slate-300 text-sm mb-3">Vrei să vezi cine a dat click?</p>
-                  <Link to={`/stats/${shortCode}`} className="inline-flex items-center gap-2 text-indigo-400 hover:text-indigo-300 font-semibold transition group">
-                    <BarChart3 size={18} /> Statistici Detaliate 
-                    <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform"/>
-                  </Link>
-               </div>
-            </div>
+            </form>
+            {error && (
+              <div className="mt-6 bg-red-500/20 border border-red-500/30 text-red-200 p-4 rounded-2xl flex items-center justify-center gap-3 text-lg">
+                <AlertTriangle size={24} /> {error}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      ) : (
+        <div className="w-full bg-slate-800/80 backdrop-blur-2xl border border-indigo-500/30 p-12 rounded-[3rem] shadow-[0_0_50px_-12px_rgba(99,102,241,0.5)] animate-fade-in-up">
+          
+          <div className="flex justify-between items-start mb-8">
+            <div>
+               <h2 className="text-3xl font-bold text-white mb-2">Link-ul tău este gata! 🚀</h2>
+               <p className="text-slate-400 text-lg break-all max-w-2xl">{longUrl}</p>
+            </div>
+            <button 
+              onClick={handleReset} 
+              className="text-slate-400 hover:text-white flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-white/10 transition"
+              title="Creează alt link"
+            >
+              <Trash2 size={20}/> Resetează
+            </button>
+          </div>
+
+          <div className="bg-slate-900/50 rounded-3xl p-8 border border-white/10 flex flex-col md:flex-row items-center gap-8 mb-8">
+            <div className="flex-1 w-full">
+              <p className="text-sm text-indigo-300 font-bold uppercase tracking-widest mb-3">Link Scurt Generat</p>
+              <a href={`${API_BASE}/${shortCode}`} target="_blank" className="text-4xl md:text-5xl font-black text-white hover:text-indigo-400 transition break-all leading-tight">
+                {API_BASE.replace('https://', '')}/{shortCode}
+              </a>
+            </div>
+            <button 
+              onClick={handleCopy}
+              className={`flex-shrink-0 flex items-center gap-3 px-8 py-6 rounded-2xl font-bold text-xl transition-all shadow-xl transform hover:scale-105 active:scale-95 ${copied ? 'bg-emerald-500 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}
+            >
+              {copied ? <CheckCircle size={28} /> : <Copy size={28} />}
+              {copied ? 'COPIAT!' : 'COPIAZĂ'}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+             <div className="bg-white p-6 rounded-3xl flex justify-center items-center shadow-lg transform hover:scale-[1.02] transition">
+               <QRCodeCanvas value={`${API_BASE}/${shortCode}`} size={200} />
+             </div>
+
+             <div className="bg-gradient-to-br from-indigo-900 to-slate-900 p-8 rounded-3xl border border-indigo-500/30 flex flex-col justify-center items-center text-center shadow-lg group">
+                <BarChart3 size={64} className="text-indigo-400 mb-4 group-hover:scale-110 transition-transform duration-300"/>
+                <h3 className="text-2xl font-bold text-white mb-2">Vezi Statistici & Locație</h3>
+                <p className="text-slate-400 mb-6">Află cine a dat click și de unde.</p>
+                <Link to={`/stats/${shortCode}`} className="bg-white text-indigo-900 px-8 py-3 rounded-xl font-bold text-lg hover:bg-indigo-50 transition w-full">
+                  Deschide Raport
+                </Link>
+             </div>
+          </div>
+
+        </div>
+      )}
     </div>
   );
 }
 
 // --- PAGINA STATS ---
-
 function Stats() {
   const { code } = useParams();
   const [data, setData] = useState(null);
@@ -175,82 +209,73 @@ function Stats() {
   }, [code]);
 
   if (loading) return <div className="text-white z-10"><Loader /></div>;
-  
-  if (error) return (
-      <div className="z-10 bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-3xl text-center text-white max-w-md">
-          <AlertTriangle size={48} className="mx-auto mb-4 text-red-400" />
-          <h2 className="text-xl font-bold mb-2">Eroare</h2>
-          <p className="text-slate-400">{error}</p>
-          <Link to="/" className="inline-block mt-6 text-indigo-400 hover:text-indigo-300">Înapoi la Home</Link>
-      </div>
-  );
+  if (error) return <div className="z-10 text-white text-center text-2xl"><p>{error}</p><Link to="/" className="underline mt-4 block">Înapoi</Link></div>;
 
   return (
-    <div className="relative z-10 w-full max-w-4xl px-4 animate-fade-in">
-      <Link to="/" className="inline-flex items-center text-slate-400 hover:text-white mb-6 transition-colors">
-        <ArrowRight className="rotate-180 mr-2" size={20} /> Înapoi la generare
+    <div className="relative z-10 w-full max-w-6xl px-4 animate-fade-in">
+      <Link to="/" className="inline-flex items-center text-indigo-300 hover:text-white mb-8 transition-colors text-lg font-medium bg-white/5 px-6 py-3 rounded-full border border-white/10">
+        <ArrowRight className="rotate-180 mr-3" size={24} /> Înapoi la link-ul meu
       </Link>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <div className="bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-2xl flex items-center gap-4">
-            <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-xl"><MousePointer2 size={28}/></div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+        {/* Card 1: Click-uri */}
+        <div className="bg-white/5 backdrop-blur-md border border-white/10 p-8 rounded-[2rem] flex items-center gap-6 shadow-xl">
+            <div className="p-5 bg-indigo-500 text-white rounded-3xl shadow-lg shadow-indigo-500/30"><MousePointer2 size={40}/></div>
             <div>
-                <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">Click-uri Totale</p>
-                <p className="text-3xl font-extrabold text-white">{data.visits}</p>
+                <p className="text-slate-400 text-sm font-bold uppercase tracking-wider mb-1">Click-uri Totale</p>
+                <p className="text-6xl font-black text-white">{data.visits}</p>
             </div>
         </div>
-
-        <div className="md:col-span-2 bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-2xl flex flex-col justify-center">
-             <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Destinație</p>
-             <a href={data.longUrl} target="_blank" className="text-lg font-medium text-white hover:text-indigo-400 truncate transition flex items-center gap-2">
-                 <LinkIcon size={16} /> {data.longUrl}
+        {/* Card 2: Link Scurt */}
+        <div className="bg-indigo-600/20 backdrop-blur-md border border-indigo-500/30 p-8 rounded-[2rem] flex flex-col justify-center shadow-xl">
+             <p className="text-indigo-300 text-sm font-bold uppercase tracking-wider mb-2">Link Scurt Generat</p>
+             <a href={`${API_BASE}/${code}`} target="_blank" className="text-3xl font-bold text-white hover:text-indigo-400 truncate transition flex items-center gap-3">
+                 <ExternalLink size={32} /> {API_BASE.replace('https://', '')}/{code}
              </a>
         </div>
       </div>
 
-      <div className="bg-slate-900/50 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
-          <div className="p-5 border-b border-white/5 flex justify-between items-center bg-white/5">
-             <h3 className="font-bold text-white flex items-center gap-2"><Clock size={18} className="text-indigo-400"/> Istoric Trafic</h3>
-             <span className="text-xs font-bold bg-green-500/20 text-green-400 px-2 py-1 rounded border border-green-500/20">LIVE</span>
+      {/* Card 3: Link Original */}
+      <div className="bg-white/5 backdrop-blur-md border border-white/10 p-8 rounded-[2rem] flex flex-col justify-center shadow-xl mb-8">
+           <p className="text-slate-400 text-sm font-bold uppercase tracking-wider mb-2">Destinație Originală</p>
+           <a href={data.longUrl} target="_blank" className="text-2xl font-bold text-white hover:text-indigo-400 truncate transition flex items-center gap-3">
+               <LinkIcon size={28} /> {data.longUrl}
+           </a>
+      </div>
+
+      {/* Tabel Istoric */}
+      <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl">
+          <div className="p-8 border-b border-white/5 flex justify-between items-center bg-white/5">
+             <h3 className="text-2xl font-bold text-white flex items-center gap-3"><Clock size={28} className="text-indigo-400"/> Istoric Trafic Detaliat</h3>
+             <span className="text-sm font-bold bg-green-500/20 text-green-400 px-4 py-2 rounded-xl border border-green-500/20 shadow-[0_0_15px_-3px_rgba(74,222,128,0.3)]">LIVE UPDATE</span>
           </div>
-          
-          <div className="overflow-x-auto max-h-96 overflow-y-auto">
+          <div className="overflow-x-auto max-h-[600px] overflow-y-auto custom-scrollbar">
              <table className="w-full text-left border-collapse">
-               <thead className="bg-black/20 text-slate-400 text-xs uppercase tracking-wider sticky top-0 backdrop-blur-md">
+               <thead className="bg-black/30 text-slate-400 text-sm uppercase tracking-wider sticky top-0 backdrop-blur-md">
                  <tr>
-                   <th className="p-4 font-semibold">IP Address</th>
-                   <th className="p-4 font-semibold">Locație</th>
-                   <th className="p-4 font-semibold">Data & Ora</th>
-                   <th className="p-4 font-semibold">Browser / OS</th>
+                   <th className="p-6 font-bold">IP Address</th>
+                   <th className="p-6 font-bold">Locație</th>
+                   <th className="p-6 font-bold">Data & Ora</th>
+                   <th className="p-6 font-bold">Browser / OS</th>
                  </tr>
                </thead>
-               <tbody className="divide-y divide-white/5 text-sm">
+               <tbody className="divide-y divide-white/5 text-base">
                  {data.history && data.history.length > 0 ? (
                    data.history.map((visit, index) => (
-                     <tr key={index} className="hover:bg-white/5 transition duration-150">
-                       <td className="p-4 font-mono text-slate-300 flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></div> {visit.ip}
+                     <tr key={index} className="hover:bg-white/5 transition duration-150 group">
+                       <td className="p-6 font-mono text-slate-300 flex items-center gap-3">
+                          <div className="w-2.5 h-2.5 bg-indigo-500 rounded-full group-hover:scale-125 transition"></div> {visit.ip}
                        </td>
-                       <td className="p-4 text-white">
-                          <div className="flex items-center gap-2">
-                             <MapPin size={14} className="text-slate-500" />
-                             {visit.city !== 'Unknown' ? visit.city : ''} 
-                             <span className="text-slate-400">({visit.country})</span>
-                          </div>
+                       <td className="p-6 text-white font-medium">
+                          <div className="flex items-center gap-3"><MapPin size={20} className="text-indigo-400" />{visit.city !== 'Unknown' ? visit.city : ''} <span className="text-slate-500">({visit.country})</span></div>
                        </td>
-                       <td className="p-4 text-slate-400">
-                          {visit.date ? format(new Date(visit.date), 'dd MMM, HH:mm') : '-'}
-                       </td>
-                       <td className="p-4 text-slate-500 text-xs max-w-[200px] truncate" title={visit.userAgent}>
-                          {visit.userAgent}
-                       </td>
+                       <td className="p-6 text-slate-400">{visit.date ? format(new Date(visit.date), 'dd MMM yyyy, HH:mm') : '-'}</td>
+                       <td className="p-6 text-slate-500 max-w-[300px] truncate" title={visit.userAgent}>{visit.userAgent}</td>
                      </tr>
                    ))
                  ) : (
                    <tr>
-                     <td colSpan="4" className="p-10 text-center text-slate-500">
-                        Niciun click înregistrat încă.
-                     </td>
+                     <td colSpan="4" className="p-16 text-center text-slate-500 text-xl">Niciun click înregistrat încă. Trimite link-ul prietenilor!</td>
                    </tr>
                  )}
                </tbody>
@@ -261,21 +286,18 @@ function Stats() {
   );
 }
 
-// --- MAIN LAYOUT (Centrare Globală) ---
-
+// --- APP ROOT ---
 export default function App() {
   return (
     <BrowserRouter>
-      <div className="relative min-h-screen flex flex-col items-center justify-center font-sans selection:bg-indigo-500 selection:text-white">
+      <div className="relative min-h-screen flex flex-col items-center justify-center font-sans selection:bg-indigo-500 selection:text-white overflow-hidden">
         <Background />
         <Navbar />
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/stats/:code" element={<Stats />} />
         </Routes>
-        <footer className="absolute bottom-4 text-slate-600 text-xs z-10">
-            © 2024 QuickLink Pro.
-        </footer>
+        <footer className="absolute bottom-6 text-slate-600 text-sm z-10 font-medium">© 2024 QuickLink Pro.</footer>
       </div>
     </BrowserRouter>
   );
