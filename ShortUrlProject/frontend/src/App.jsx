@@ -34,7 +34,8 @@ const Navbar = () => (
     {/* pointer-events-none pe container, dar auto pe butoane ca sa nu blocheze click-urile dedesubt */}
     <Link to="/" className="text-3xl font-extrabold text-white tracking-tighter flex items-center gap-3 pointer-events-auto">
       <Zap className="text-yellow-400 fill-yellow-400" size={32} />
-      Quick<span className="text-indigo-400">Link</span>
+      {/* 👇 AICI AM MODIFICAT NUMELE 👇 */}
+      Feaa<span className="text-indigo-400">Link</span>
     </Link>
     <Link to="/admin" className="text-slate-400 hover:text-white transition flex items-center gap-2 text-sm font-bold bg-white/5 px-4 py-2 rounded-full border border-white/10 hover:bg-white/10 pointer-events-auto">
        <LayoutDashboard size={18}/> Admin
@@ -264,7 +265,7 @@ export default function App() {
           <Route path="/stats/:code" element={<Stats />} />
           <Route path="/admin" element={<AdminDashboard />} />
         </Routes>
-        <footer className="absolute bottom-6 text-slate-600 text-sm z-10 font-medium">© 2024 QuickLink Pro.</footer>
+        <footer className="absolute bottom-6 text-slate-600 text-sm z-10 font-medium">© 2025 Feaa Link Pro.</footer>
       </div>
     </BrowserRouter>
   );
