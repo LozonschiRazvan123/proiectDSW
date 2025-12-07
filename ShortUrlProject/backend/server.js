@@ -11,31 +11,27 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Configurare CORS (Permite frontend-ului să vorbească cu serverul)
 app.use(cors());
 app.use(express.json());
-app.set('trust proxy', true); // Critic pentru Render ca să vadă IP-ul real
+app.set('trust proxy', true);
 
-// Conexiune Redis
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-// --- RUTA 0: Confirmare că serverul merge (Fix pentru "Cannot GET /") ---
 app.get('/', (req, res) => {
-  res.send('✅ Backend-ul este ONLINE! Te rog folosește Frontend-ul pentru a scurta link-uri.');
+  res.send('✅ Backend-ul funcționează! Folosește Frontend-ul.');
 });
 
-// --- RUTA 1: Scurtare URL ---
+// 1. SCURTARE
 app.post('/api/shorten', async (req, res) => {
   try {
     const { longUrl } = req.body;
     if (!validator.isURL(longUrl, { require_protocol: true })) {
-      return res.status(400).json({ error: "URL invalid! Include http:// sau https://" });
+      return res.status(400).json({ error: "URL invalid!" });
     }
 
-    // Verificare duplicate
     const existingCode = await redis.get(`url:${longUrl}`);
     if (existingCode) {
       return res.json({ shortCode: existingCode, msg: "Link existent." });
@@ -48,48 +44,55 @@ app.post('/api/shorten', async (req, res) => {
 
     res.json({ shortCode });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Eroare internă la server." });
+    res.status(500).json({ error: "Eroare internă." });
   }
 });
 
-// --- RUTA 2: Statistici ---
+// 2. STATISTICI (AICI ESTE FIX-UL CRITIC)
 app.get('/api/stats/:code', async (req, res) => {
   const { code } = req.params;
   
-  const longUrl = await redis.get(`short:${code}`);
-  if (!longUrl) return res.status(404).json({ error: "Link inexistent" });
-
-  const visits = await redis.get(`stats:${code}`);
-  
-  // Extragem istoricul (lista de vizite)
-  const historyRaw = await redis.lrange(`history:${code}`, 0, 49);
-  let history = [];
   try {
-      history = historyRaw.map(item => JSON.parse(item));
-  } catch (e) {
-      history = [];
-  }
+    const longUrl = await redis.get(`short:${code}`);
+    if (!longUrl) return res.status(404).json({ error: "Link inexistent" });
 
-  res.json({ 
-    longUrl, 
-    visits: visits || 0,
-    history: history
-  });
+    const visits = await redis.get(`stats:${code}`);
+    
+    // Citim lista brută din Redis
+    const historyRaw = await redis.lrange(`history:${code}`, 0, 49);
+    
+    // Procesare sigură a datelor
+    const history = Array.isArray(historyRaw) 
+      ? historyRaw.map(item => {
+          // Dacă e deja obiect, îl returnăm direct
+          if (typeof item === 'object' && item !== null) return item;
+          // Dacă e text, încercăm să îl parsam
+          try { return JSON.parse(item); } catch (e) { return null; }
+        }).filter(item => item !== null) // Eliminăm eventualele erori
+      : [];
+
+    res.json({ 
+      longUrl, 
+      visits: visits || 0, 
+      history: history 
+    });
+
+  } catch (error) {
+    console.error("Eroare Stats:", error);
+    res.status(500).json({ error: "Eroare la citirea statisticilor" });
+  }
 });
 
-// --- RUTA 3: Redirectare + Tracking ---
+// 3. REDIRECT + TRACKING
 app.get('/:code', async (req, res) => {
   const { code } = req.params;
   const longUrl = await redis.get(`short:${code}`);
 
   if (longUrl) {
-    // 1. Numărăm vizita
     await redis.incr(`stats:${code}`);
 
-    // 2. Aflăm IP și Locație
     let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'Unknown';
-    if (ip && ip.includes(',')) ip = ip.split(',')[0].trim();
+    if (ip.includes(',')) ip = ip.split(',')[0].trim();
 
     let country = "Unknown";
     let city = "Unknown";
@@ -101,9 +104,7 @@ app.get('/:code', async (req, res) => {
                 country = geoRes.data.country_name || "Unknown";
                 city = geoRes.data.city || "Unknown";
             }
-        } catch (e) {
-            console.log("GeoIP skip");
-        }
+        } catch (e) { console.log("GeoIP Error"); }
     }
 
     const visitData = {
@@ -114,16 +115,12 @@ app.get('/:code', async (req, res) => {
         userAgent: req.get('User-Agent') || "Unknown"
     };
 
-    // Salvăm în istoric
+    // Salvăm ca string
     await redis.lpush(`history:${code}`, JSON.stringify(visitData));
-    
-    // Redirect
     res.redirect(longUrl);
   } else {
-    res.status(404).send("Link invalid sau expirat.");
+    res.status(404).send("Link expirat.");
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Backend running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
