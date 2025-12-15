@@ -1,44 +1,50 @@
 import { apiFetch } from "./api";
-import { listPending, removeItem, markFailed } from "./offlineQueue";
+import { peekAll, removeByIds } from "./offlineQueue";
 
-// ✅ rulează când revii online (sau la refresh)
-export async function syncPendingShortens({ onItemSynced, onDone } = {}) {
-  const pending = await listPending();
+export async function syncPendingShortens(options = {}) {
+  const { onItemSynced, onItemFailed, onDone } = options;
+
+  const pending = await peekAll();
   if (!pending.length) {
-    onDone?.({ synced: 0, total: 0 });
-    return { synced: 0, total: 0 };
+    onDone?.({ syncedAny: false, lastSyncedCode: null, remaining: 0 });
+    return { syncedAny: false, lastSyncedCode: null, remaining: 0 };
   }
 
-  let synced = 0;
+  let syncedAny = false;
+  let lastSyncedCode = null;
+  const syncedIds = [];
 
   for (const item of pending) {
-    try {
-      const { res, data, networkError } = await apiFetch("/api/shorten", {
-        method: "POST",
-        body: JSON.stringify({ longUrl: item.longUrl }),
-      });
+    if (!navigator.onLine) break;
 
-      // dacă încă nu merge netul sau serverul pică, lăsăm în coadă
-      if (networkError) {
-        await markFailed(item.id, "Network error during sync");
-        continue;
-      }
+    const { res, data, networkError } = await apiFetch("/api/shorten", {
+      method: "POST",
+      body: JSON.stringify({ longUrl: item.longUrl }),
+    });
 
-      if (!res?.ok) {
-        await markFailed(item.id, data?.error || "Server error during sync");
-        continue;
-      }
+    if (networkError || !res) break;
+    if (!res.ok) {
+      if (res.status >= 500) break;
 
-      // ✅ succes: ștergem din coadă
-      await removeItem(item.id);
-      synced += 1;
-
-      onItemSynced?.({ local: item, server: data });
-    } catch (e) {
-      await markFailed(item.id, e?.message || "Unknown sync error");
+      onItemFailed?.({ id: item.id, error: data?.error || `HTTP ${res.status}` });
+      syncedIds.push(item.id);
+      continue;
     }
+
+    syncedAny = true;
+    lastSyncedCode = data?.shortCode || lastSyncedCode;
+    syncedIds.push(item.id);
+
+    onItemSynced?.({
+      id: item.id,
+      shortCode: data?.shortCode,
+      longUrl: item.longUrl,
+    });
   }
 
-  onDone?.({ synced, total: pending.length });
-  return { synced, total: pending.length };
+  let remaining = pending.length;
+  if (syncedIds.length) remaining = await removeByIds(syncedIds);
+
+  onDone?.({ syncedAny, lastSyncedCode, remaining });
+  return { syncedAny, lastSyncedCode, remaining };
 }

@@ -19,6 +19,7 @@ function ShortenerForm() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "fail");
       setMsg(`ok:${data.shortCode}`);
+    // eslint-disable-next-line no-unused-vars
     } catch (err) {
       setMsg("error");
     }

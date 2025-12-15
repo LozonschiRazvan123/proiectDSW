@@ -1,56 +1,39 @@
-import { openDB } from "idb";
+const KEY = "offline_shortens_v1";
 
-const DB_NAME = "shorturl_offline_db";
-const STORE = "shorten_queue";
-const VERSION = 1;
+const readQueue = () => {
+  try {
+    return JSON.parse(localStorage.getItem(KEY) || "[]");
+  } catch {
+    return [];
+  }
+};
 
-async function getDb() {
-  return openDB(DB_NAME, VERSION, {
-    upgrade(db) {
-      if (!db.objectStoreNames.contains(STORE)) {
-        const st = db.createObjectStore(STORE, {
-          keyPath: "id",
-          autoIncrement: true,
-        });
-        st.createIndex("status", "status");
-        st.createIndex("createdAt", "createdAt");
-      }
-    },
-  });
-}
+const writeQueue = (arr) => {
+  localStorage.setItem(KEY, JSON.stringify(arr));
+};
 
-// ✅ adaugă în coadă (pending)
 export async function enqueueShorten(longUrl) {
-  const db = await getDb();
-  return db.add(STORE, {
+  const q = readQueue();
+  q.push({
+    id: crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(16).slice(2)}`,
     longUrl,
-    status: "pending",
-    createdAt: Date.now(),
-    attempts: 0,
-    lastError: null,
+    createdAt: new Date().toISOString(),
   });
-}
-
-export async function listPending() {
-  const db = await getDb();
-  return db.getAllFromIndex(STORE, "status", "pending");
-}
-
-export async function markFailed(id, message) {
-  const db = await getDb();
-  const rec = await db.get(STORE, id);
-  if (!rec) return;
-  rec.attempts = (rec.attempts || 0) + 1;
-  rec.lastError = message || "Sync failed";
-  await db.put(STORE, rec);
-}
-
-export async function removeItem(id) {
-  const db = await getDb();
-  return db.delete(STORE, id);
+  writeQueue(q);
+  return q.length;
 }
 
 export async function countPending() {
-  const pending = await listPending();
-  return pending.length;
+  return readQueue().length;
+}
+
+export async function peekAll() {
+  return readQueue();
+}
+
+export async function removeByIds(ids = []) {
+  const set = new Set(ids);
+  const q = readQueue().filter((x) => !set.has(x.id));
+  writeQueue(q);
+  return q.length;
 }

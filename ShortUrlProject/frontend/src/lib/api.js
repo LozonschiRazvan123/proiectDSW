@@ -1,4 +1,19 @@
-export const getApiBase = () => import.meta.env.VITE_API_BASE || "http://localhost:5000";
+const PROD_FALLBACK = "https://proiectdsw.onrender.com";
+const DEV_FALLBACK = "http://localhost:5000";
+
+const normalizeBase = (base) => (base || "").replace(/\/+$/, "");
+
+export const getApiBase = () => {
+  const fromEnv = normalizeBase(import.meta.env.VITE_API_BASE);
+  if (fromEnv) return fromEnv;
+
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (host === "localhost" || host === "127.0.0.1") return DEV_FALLBACK;
+  }
+
+  return PROD_FALLBACK;
+};
 
 export const getToken = () => localStorage.getItem("token");
 export const setToken = (t) => localStorage.setItem("token", t);
@@ -27,7 +42,10 @@ export async function apiFetch(path, options = {}) {
 
     return { res, data, networkError: false };
   } catch (e) {
-    // ✅ aici intră când apare "TypeError: fetch failed"
-    return { res: null, data: { error: e?.message || "fetch failed" }, networkError: true };
+    return {
+      res: null,
+      data: { error: e?.message || "fetch failed" },
+      networkError: true,
+    };
   }
 }
