@@ -1,19 +1,23 @@
-import { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Link, useParams } from 'react-router-dom';
-import { QRCodeCanvas } from 'qrcode.react';
-import { 
-  Copy, ArrowRight, Link as LinkIcon, BarChart3, 
-  CheckCircle, AlertTriangle, Clock, MapPin, 
-  MousePointer2, Zap, Trash2, ExternalLink, Info,
-  LayoutDashboard, TrendingUp, Globe 
-} from 'lucide-react';
-import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import copy from 'copy-to-clipboard';
-import { format } from 'date-fns';
+import { useEffect, useMemo, useState } from "react";
+import {
+  BrowserRouter, Routes, Route, Link, Navigate, useNavigate, useParams
+} from "react-router-dom";
+import { QRCodeCanvas } from "qrcode.react";
+import copy from "copy-to-clipboard";
+import { format } from "date-fns";
+import {
+  ArrowRight, BarChart3, CheckCircle, Copy, Link as LinkIcon, AlertTriangle,
+  LayoutDashboard, LogIn, UserPlus, LogOut, Trash2, Pencil, ExternalLink, Globe,
+  TrendingUp, Clock
+} from "lucide-react";
+import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from "recharts";
 
-const API_BASE = "https://proiectdsw.onrender.com"; 
+import { apiFetch, clearToken, getApiBase, getToken, setToken } from "./lib/api";
+import { enqueueShorten, countPending } from "./lib/offlineQueue";
+import { syncPendingShortens } from "./lib/syncQueue";
 
-// --- UTILITARE ---
+const API_BASE = getApiBase();
+
 const Loader = () => (
   <div className="flex justify-center p-2">
     <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -22,96 +26,523 @@ const Loader = () => (
 
 const Background = () => (
   <div className="fixed inset-0 z-0 overflow-hidden bg-slate-900">
-    <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900"></div>
+    <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950"></div>
     <div className="absolute top-0 -left-4 w-96 h-96 bg-purple-500 rounded-full mix-blend-multiply filter blur-[100px] opacity-20 animate-blob"></div>
     <div className="absolute top-0 -right-4 w-96 h-96 bg-indigo-500 rounded-full mix-blend-multiply filter blur-[100px] opacity-20 animate-blob animation-delay-2000"></div>
     <div className="absolute -bottom-8 left-20 w-96 h-96 bg-pink-500 rounded-full mix-blend-multiply filter blur-[100px] opacity-20 animate-blob animation-delay-4000"></div>
   </div>
 );
 
-const Navbar = () => (
-  <nav className="absolute top-0 left-0 w-full p-8 flex justify-between items-center z-50 pointer-events-none">
-    {/* pointer-events-none pe container, dar auto pe butoane ca sa nu blocheze click-urile dedesubt */}
-    <Link to="/" className="text-3xl font-extrabold text-white tracking-tighter flex items-center gap-3 pointer-events-auto">
-      <Zap className="text-yellow-400 fill-yellow-400" size={32} />
-      {/* 👇 AICI AM MODIFICAT NUMELE 👇 */}
-      Feaa<span className="text-indigo-400">Link</span>
-    </Link>
-    <Link to="/admin" className="text-slate-400 hover:text-white transition flex items-center gap-2 text-sm font-bold bg-white/5 px-4 py-2 rounded-full border border-white/10 hover:bg-white/10 pointer-events-auto">
-       <LayoutDashboard size={18}/> Admin
-    </Link>
-  </nav>
-);
+function ProtectedRoute({ children }) {
+  if (!getToken()) return <Navigate to="/login" replace />;
+  return children;
+}
 
-// --- PAGINA HOME ---
-function Home() {
-  const [longUrl, setLongUrl] = useState(() => sessionStorage.getItem('lastLongUrl') || '');
-  const [shortCode, setShortCode] = useState(() => sessionStorage.getItem('lastShortCode') || null);
-  const [infoMsg, setInfoMsg] = useState(() => sessionStorage.getItem('lastInfoMsg') || '');
-  const [error, setError] = useState('');
+function AdminRoute({ role, children }) {
+  if (role !== "admin") return <Navigate to="/" replace />;
+  return children;
+}
+
+function Navbar({ authed, role, onLogout }) {
+  const nav = useNavigate();
+  const logout = () => { onLogout(); nav("/login", { replace: true }); };
+
+  return (
+    <nav className="fixed top-0 left-0 w-full p-6 flex justify-between items-center z-50">
+      <Link to="/" className="text-2xl font-extrabold text-white tracking-tight flex items-center gap-2">
+        <span className="w-9 h-9 rounded-2xl bg-indigo-500 flex items-center justify-center">S</span>
+        Short<span className="text-indigo-300">Url</span>
+      </Link>
+
+      <div className="flex items-center gap-2">
+        {authed && role === "admin" && (
+          <Link to="/admin"
+            className="text-slate-200/80 hover:text-white transition flex items-center gap-2 text-sm font-bold bg-white/5 px-4 py-2 rounded-full border border-white/10 hover:bg-white/10">
+            <LayoutDashboard size={18} /> Admin
+          </Link>
+        )}
+
+        {authed ? (
+          <>
+            <Link to="/dashboard"
+              className="text-slate-200/80 hover:text-white transition flex items-center gap-2 text-sm font-bold bg-white/5 px-4 py-2 rounded-full border border-white/10 hover:bg-white/10">
+              <BarChart3 size={18} /> Dashboard
+            </Link>
+            <button onClick={logout}
+              className="text-slate-200/80 hover:text-white transition flex items-center gap-2 text-sm font-bold bg-white/5 px-4 py-2 rounded-full border border-white/10 hover:bg-white/10">
+              <LogOut size={18} /> Logout
+            </button>
+          </>
+        ) : (
+          <>
+            <Link to="/login"
+              className="text-slate-200/80 hover:text-white transition flex items-center gap-2 text-sm font-bold bg-white/5 px-4 py-2 rounded-full border border-white/10 hover:bg-white/10">
+              <LogIn size={18} /> Login
+            </Link>
+            <Link to="/register"
+              className="text-slate-200/80 hover:text-white transition flex items-center gap-2 text-sm font-bold bg-indigo-600 px-4 py-2 rounded-full border border-indigo-400/30 hover:bg-indigo-500">
+              <UserPlus size={18} /> Register
+            </Link>
+          </>
+        )}
+      </div>
+    </nav>
+  );
+}
+
+// ---------- LOGIN ----------
+function Login({ onAuth, onRole }) {
+  const nav = useNavigate();
+  const [username, setU] = useState("");
+  const [password, setP] = useState("");
+  const [loading, setL] = useState(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => { if (getToken()) nav("/", { replace: true }); }, [nav]);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setErr(""); setL(true);
+
+    const { res, data } = await apiFetch("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password })
+    });
+
+    setL(false);
+    if (!res?.ok) return setErr(data?.error || "Eroare login");
+
+    setToken(data.token);
+    onAuth(true);
+    onRole(data.role);
+    nav("/", { replace: true });
+  };
+
+  return (
+    <div className="relative z-10 w-full max-w-md pt-28 px-4">
+      <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-[2rem] shadow-2xl">
+        <h1 className="text-3xl font-black text-white mb-6">Login</h1>
+        <form onSubmit={submit} className="space-y-4">
+          <input className="w-full p-4 rounded-2xl bg-slate-950/60 border border-white/10 text-white outline-none"
+            placeholder="username" value={username} onChange={(e) => setU(e.target.value)} />
+          <input className="w-full p-4 rounded-2xl bg-slate-950/60 border border-white/10 text-white outline-none"
+            placeholder="password" type="password" value={password} onChange={(e) => setP(e.target.value)} />
+
+          {err && <div className="bg-red-500/20 border border-red-500/30 text-red-200 p-3 rounded-xl flex gap-2 items-center">
+            <AlertTriangle size={18} /> {err}
+          </div>}
+
+          <button disabled={loading} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-2xl">
+            {loading ? <Loader /> : "Sign in"}
+          </button>
+        </form>
+
+        <p className="text-slate-400 text-sm mt-4">
+          Nu ai cont? <Link to="/register" className="text-indigo-300 hover:text-white">Register</Link>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ---------- REGISTER ----------
+function Register({ onAuth, onRole }) {
+  const nav = useNavigate();
+  const [username, setU] = useState("");
+  const [password, setP] = useState("");
+  const [loading, setL] = useState(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => { if (getToken()) nav("/", { replace: true }); }, [nav]);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setErr(""); setL(true);
+
+    const { res, data } = await apiFetch("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ username, password })
+    });
+
+    setL(false);
+    if (!res?.ok) return setErr(data?.error || "Eroare register");
+
+    setToken(data.token);
+    onAuth(true);
+    onRole(data.role);
+    nav("/", { replace: true });
+  };
+
+  return (
+    <div className="relative z-10 w-full max-w-md pt-28 px-4">
+      <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-[2rem] shadow-2xl">
+        <h1 className="text-3xl font-black text-white mb-6">Register</h1>
+        <form onSubmit={submit} className="space-y-4">
+          <input className="w-full p-4 rounded-2xl bg-slate-950/60 border border-white/10 text-white outline-none"
+            placeholder="username (min 3)" value={username} onChange={(e) => setU(e.target.value)} />
+          <input className="w-full p-4 rounded-2xl bg-slate-950/60 border border-white/10 text-white outline-none"
+            placeholder="password (min 6)" type="password" value={password} onChange={(e) => setP(e.target.value)} />
+
+          {err && <div className="bg-red-500/20 border border-red-500/30 text-red-200 p-3 rounded-xl flex gap-2 items-center">
+            <AlertTriangle size={18} /> {err}
+          </div>}
+
+          <button disabled={loading} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-2xl">
+            {loading ? <Loader /> : "Create account"}
+          </button>
+        </form>
+
+        <p className="text-slate-400 text-sm mt-4">
+          Ai deja cont? <Link to="/login" className="text-indigo-300 hover:text-white">Login</Link>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ---------- HOME ----------
+function Home({ bumpDashboard, pendingCount }) {
+  const nav = useNavigate();
+  const [longUrl, setLongUrl] = useState("");
+  const [shortCode, setShortCode] = useState(null);
+  const [infoMsg, setInfoMsg] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(''); setInfoMsg(''); setShortCode(null); setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/shorten`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ longUrl }) });
-      const data = await res.json();
-      if (res.ok) {
-        setShortCode(data.shortCode);
-        sessionStorage.setItem('lastShortCode', data.shortCode);
-        sessionStorage.setItem('lastLongUrl', longUrl);
-        if (data.existing) { setInfoMsg(data.msg); sessionStorage.setItem('lastInfoMsg', data.msg); } 
-        else { sessionStorage.removeItem('lastInfoMsg'); }
-      } else { setError(data.error || 'Eroare server.'); }
-    } catch (err) { console.error(err); setError("Serverul nu răspunde. Verifică Render."); }
+    setError(""); setInfoMsg(""); setShortCode(null);
+
+    // 1) dacă browserul zice offline -> direct coadă
+    if (!navigator.onLine) {
+      await enqueueShorten(longUrl);
+      setInfoMsg("Ești OFFLINE. Cererea a fost salvată și se va sincroniza automat când revii online.");
+      bumpDashboard();
+      return;
+    }
+
+    // 2) dacă e “online” încercăm serverul; dacă pică (networkError/500) -> coadă
+    setLoading(true);
+    const { res, data, networkError } = await apiFetch("/api/shorten", {
+      method: "POST",
+      body: JSON.stringify({ longUrl }),
+    });
     setLoading(false);
+
+    if (networkError || !res) {
+      await enqueueShorten(longUrl);
+      setInfoMsg("Serverul nu e accesibil acum. Am salvat cererea offline și o sincronizez când revii online.");
+      bumpDashboard();
+      return;
+    }
+
+    if (!res.ok) {
+      // Dacă serverul răspunde 500 (Upstash pică), tot îl poți trata ca “offline fallback”
+      if (res.status >= 500) {
+        await enqueueShorten(longUrl);
+        setInfoMsg("Serverul are o problemă (500). Am salvat cererea offline și o sincronizez mai târziu.");
+        bumpDashboard();
+        return;
+      }
+      return setError(data?.error || "Eroare server");
+    }
+
+    setShortCode(data.shortCode);
+    if (data.existing) setInfoMsg(data.msg || "Link existent");
+
+    bumpDashboard();
+
+    if (data.reactivated) {
+      setTimeout(() => nav("/dashboard", { replace: false }), 300);
+    }
   };
 
-  const handleReset = () => { setLongUrl(''); setShortCode(null); setInfoMsg(''); sessionStorage.clear(); };
-  const handleCopy = () => { copy(`${API_BASE}/${shortCode}`); setCopied(true); setTimeout(() => setCopied(false), 2000); };
+  const handleCopy = () => {
+    copy(`${API_BASE}/${shortCode}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
+  };
 
   return (
-    <div className="relative z-10 w-full max-w-4xl px-6 flex flex-col items-center animate-fade-in pt-32">
-      {!shortCode ? (
-        <>
-          <div className="text-center mb-12">
-            <h1 className="text-6xl md:text-7xl font-black text-white mb-6 tracking-tight drop-shadow-2xl">
-              Scurtează <br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">GIGANTIC</span>
-            </h1>
-            <p className="text-slate-300 text-2xl font-light">Cel mai simplu mod de a gestiona link-uri lungi.</p>
+    <div className="relative z-10 w-full max-w-4xl px-4 pt-28 pb-10">
+      <div className="text-center mb-10">
+        <h1 className="text-5xl md:text-6xl font-black text-white tracking-tight">
+          Short<span className="text-indigo-300">Url</span>
+        </h1>
+        <p className="text-slate-300 text-lg mt-3">Creează link-uri scurte, QR și statistici.</p>
+
+        {/* ✅ mic indicator de coadă */}
+        {pendingCount > 0 && (
+          <div className="mt-4 inline-flex items-center gap-2 bg-yellow-500/15 border border-yellow-500/25 text-yellow-200 px-4 py-2 rounded-full text-sm">
+            <AlertTriangle size={16} />
+            Ai {pendingCount} cereri în coada offline (se vor sincroniza automat).
           </div>
-          <div className="w-full bg-white/5 backdrop-blur-2xl border border-white/10 p-10 rounded-[2.5rem] shadow-2xl">
-            <form onSubmit={handleSubmit} className="relative group">
-              <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none text-slate-400"><LinkIcon size={32} /></div>
-              <input type="text" className="w-full py-8 pl-20 pr-48 rounded-3xl bg-slate-900/60 border-2 border-slate-700 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 text-white placeholder-slate-500 outline-none transition-all shadow-inner text-2xl" placeholder="Lipește link-ul aici..." value={longUrl} onChange={(e) => setLongUrl(e.target.value)}/>
-              <button disabled={loading} className="absolute right-3 top-3 bottom-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-10 rounded-2xl transition-all shadow-lg flex items-center gap-3 disabled:opacity-50 text-xl">
-                {loading ? <Loader /> : <>SCURTEAZĂ <ArrowRight size={24} /></>}
+        )}
+      </div>
+
+      <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-[2rem] shadow-2xl">
+        <form onSubmit={handleSubmit} className="relative">
+          <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none text-slate-400">
+            <LinkIcon size={26} />
+          </div>
+          <input
+            className="w-full py-6 pl-16 pr-44 rounded-3xl bg-slate-950/50 border-2 border-slate-700 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 text-white placeholder-slate-500 outline-none transition-all text-lg"
+            placeholder="Lipește link-ul (https://...)"
+            value={longUrl}
+            onChange={(e) => setLongUrl(e.target.value)}
+          />
+          <button
+            disabled={loading}
+            className="absolute right-3 top-3 bottom-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-8 rounded-2xl transition-all shadow-lg flex items-center gap-2 disabled:opacity-60"
+          >
+            {loading ? <Loader /> : <>Scurtează <ArrowRight size={22} /></>}
+          </button>
+        </form>
+
+        {error && (
+          <div className="mt-4 bg-red-500/20 border border-red-500/30 text-red-200 p-4 rounded-2xl flex items-center gap-3">
+            <AlertTriangle size={22} /> {error}
+          </div>
+        )}
+        {infoMsg && (
+          <div className="mt-4 bg-blue-500/20 border border-blue-500/30 text-blue-100 p-4 rounded-2xl">
+            {infoMsg}
+          </div>
+        )}
+
+        {shortCode && (
+          <div className="mt-6 bg-slate-900/60 border border-indigo-500/30 rounded-[2rem] p-6">
+            <p className="text-indigo-200 text-sm font-bold uppercase tracking-widest mb-2">Link scurt</p>
+
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <a href={`${API_BASE}/${shortCode}`} target="_blank"
+                className="text-3xl font-black text-white hover:text-indigo-300 transition break-all">
+                {API_BASE.replace("http://", "").replace("https://", "")}/{shortCode}
+              </a>
+
+              <button onClick={handleCopy}
+                className={`flex items-center gap-2 px-6 py-4 rounded-2xl font-bold transition ${
+                  copied ? "bg-emerald-500 text-white" : "bg-indigo-600 hover:bg-indigo-500 text-white"
+                }`}>
+                {copied ? <CheckCircle size={22} /> : <Copy size={22} />}
+                {copied ? "Copiat!" : "Copiază"}
               </button>
-            </form>
-            {error && <div className="mt-6 bg-red-500/20 border border-red-500/30 text-red-200 p-4 rounded-2xl flex items-center justify-center gap-3 text-lg"><AlertTriangle size={24} /> {error}</div>}
+            </div>
+
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white rounded-2xl p-4 flex justify-center">
+                <QRCodeCanvas value={`${API_BASE}/${shortCode}`} size={160} />
+              </div>
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-5 flex flex-col justify-center">
+                <p className="text-white font-bold text-xl mb-2">Statistici</p>
+                <Link to={`/stats/${shortCode}`} className="inline-flex items-center gap-2 text-indigo-300 hover:text-white font-semibold">
+                  <BarChart3 size={18} /> Vezi /stats
+                </Link>
+                <p className="text-slate-400 mt-2 text-sm">Stats sunt vizibile doar owner-ului sau adminului.</p>
+              </div>
+            </div>
+
           </div>
-        </>
-      ) : (
-        <div className="w-full bg-slate-800/80 backdrop-blur-2xl border border-indigo-500/30 p-12 rounded-[3rem] shadow-[0_0_50px_-12px_rgba(99,102,241,0.5)]">
-          <div className="flex justify-between items-start mb-8">
-            <div><h2 className="text-3xl font-bold text-white mb-2">Link-ul tău este gata! 🚀</h2><p className="text-slate-400 text-lg break-all max-w-2xl">{longUrl}</p></div>
-            <button onClick={handleReset} className="text-slate-400 hover:text-white flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-white/10 transition"><Trash2 size={20}/> Resetează</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------- STATS ----------
+function Stats() {
+  const { code } = useParams();
+  const [data, setData] = useState(null);
+  const [loading, setL] = useState(true);
+
+  useEffect(() => {
+    apiFetch(`/api/stats/${code}`)
+      .then(({ res, data }) => {
+        if (!res?.ok) setData({ error: data?.error || "Eroare" });
+        else setData(data);
+        setL(false);
+      })
+      .catch(() => setL(false));
+  }, [code]);
+
+  if (loading) return <div className="relative z-10 pt-28 text-white"><Loader /></div>;
+  if (!data || data.error) return <div className="relative z-10 pt-28 text-white text-center text-2xl">{data?.error || "Eroare"}</div>;
+
+  return (
+    <div className="relative z-10 w-full max-w-6xl px-4 pt-28 pb-10">
+      <Link to="/" className="inline-flex items-center text-indigo-300 hover:text-white mb-8 transition text-lg font-medium bg-white/5 px-6 py-3 rounded-full border border-white/10">
+        <ArrowRight className="rotate-180 mr-3" size={22} /> Înapoi
+      </Link>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6">
+          <p className="text-slate-400 text-sm font-bold uppercase tracking-wider">Total click-uri</p>
+          <p className="text-6xl font-black text-white mt-2">{data.visits}</p>
+          <p className="text-slate-500 text-sm mt-2">Owner: <span className="text-slate-200 font-semibold">{data.owner}</span></p>
+        </div>
+        <div className="bg-indigo-600/20 border border-indigo-500/30 rounded-[2rem] p-6">
+          <p className="text-indigo-200 text-sm font-bold uppercase tracking-wider mb-2">Link scurt</p>
+          <a href={`${API_BASE}/${code}`} target="_blank" className="text-white text-2xl font-bold flex gap-2 items-center">
+            <ExternalLink /> {API_BASE.replace("https://", "").replace("http://", "")}/{code}
+          </a>
+        </div>
+      </div>
+
+      <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6 mb-6">
+        <p className="text-slate-400 text-sm font-bold uppercase tracking-wider mb-2">Destinație</p>
+        <a href={data.longUrl} target="_blank" className="text-white text-xl font-semibold break-all hover:text-indigo-300">
+          {data.longUrl}
+        </a>
+      </div>
+
+      <div className="bg-slate-900/60 border border-white/10 rounded-[2rem] overflow-hidden">
+        <div className="p-6 border-b border-white/10 flex items-center justify-between bg-white/5">
+          <h3 className="text-xl font-bold text-white flex items-center gap-2">
+            <Clock className="text-indigo-300" /> Istoric (ultimele 50)
+          </h3>
+          <span className="text-xs font-bold bg-green-500/20 text-green-300 px-3 py-1 rounded-full border border-green-500/20">LIVE</span>
+        </div>
+
+        <div className="overflow-x-auto max-h-[560px] overflow-y-auto">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-black/30 text-slate-400 text-xs uppercase tracking-wider sticky top-0">
+              <tr>
+                <th className="p-4">IP</th>
+                <th className="p-4">Țară</th>
+                <th className="p-4">Oraș</th>
+                <th className="p-4">Data</th>
+                <th className="p-4">User-Agent</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/10 text-sm">
+              {(data.history || []).length ? data.history.map((v, i) => (
+                <tr key={i} className="hover:bg-white/5">
+                  <td className="p-4 font-mono text-slate-200">{v.ip}</td>
+                  <td className="p-4 text-slate-200">{v.country}</td>
+                  <td className="p-4 text-slate-200">{v.city}</td>
+                  <td className="p-4 text-slate-400">{v.date ? format(new Date(v.date), "dd MMM yyyy, HH:mm") : "-"}</td>
+                  <td className="p-4 text-slate-500 max-w-[320px] truncate" title={v.userAgent}>{v.userAgent}</td>
+                </tr>
+              )) : (
+                <tr><td className="p-10 text-center text-slate-400" colSpan={5}>Încă nu sunt vizite.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- DASHBOARD ----------
+function Dashboard({ refreshKey }) {
+  const nav = useNavigate();
+  const [items, setItems] = useState([]);
+  const [loading, setL] = useState(true);
+  const [error, setErr] = useState("");
+  const [editing, setEditing] = useState(null);
+  const [newUrl, setNewUrl] = useState("");
+
+  const load = async () => {
+    setErr(""); setL(true);
+    const { res, data } = await apiFetch("/api/user/links");
+    setL(false);
+
+    if (!res?.ok) {
+      if (res?.status === 401) { setErr("Neautorizat."); nav("/login"); return; }
+      return setErr(data?.error || "Eroare");
+    }
+    setItems(data.items || []);
+  };
+
+  useEffect(() => { load(); }, [refreshKey]);
+
+  const del = async (code) => {
+    if (!confirm(`Ștergi /${code}?`)) return;
+    const { res, data } = await apiFetch(`/api/user/links/${code}`, { method: "DELETE" });
+    if (!res?.ok) return alert(data?.error || "Eroare delete");
+    load();
+  };
+
+  const startEdit = (it) => { setEditing(it.code); setNewUrl(it.longUrl); };
+
+  const saveEdit = async () => {
+    const code = editing;
+    const { res, data } = await apiFetch(`/api/user/links/${code}`, {
+      method: "PUT",
+      body: JSON.stringify({ longUrl: newUrl })
+    });
+    if (!res?.ok) return alert(data?.error || "Eroare update");
+    setEditing(null);
+    setNewUrl("");
+    load();
+  };
+
+  if (loading) return <div className="relative z-10 pt-28 text-white"><Loader /></div>;
+
+  return (
+    <div className="relative z-10 w-full max-w-6xl px-4 pt-28 pb-10">
+      <h1 className="text-4xl font-black text-white mb-6 flex items-center gap-2">
+        <BarChart3 className="text-indigo-300" /> Dashboard (link-urile tale)
+      </h1>
+
+      {error && (
+        <div className="bg-red-500/20 border border-red-500/30 text-red-200 p-4 rounded-2xl flex items-center gap-2 mb-6">
+          <AlertTriangle /> {error}
+        </div>
+      )}
+
+      <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6">
+        {items.length === 0 ? (
+          <p className="text-slate-300">Nu ai link-uri încă. Creează unul pe Home.</p>
+        ) : (
+          <div className="space-y-4">
+            {items.map((it) => (
+              <div key={it.code} className="bg-slate-950/40 border border-white/10 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="text-white font-black text-2xl">/{it.code}</div>
+                  <div className="text-slate-400 text-sm break-all">{it.longUrl}</div>
+                  <div className="text-slate-500 text-xs mt-1">
+                    Visits: <span className="text-slate-200 font-bold">{it.visits}</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <a className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-200 hover:text-white flex items-center gap-2"
+                    href={`${API_BASE}/${it.code}`} target="_blank">
+                    <ExternalLink size={18} /> Open
+                  </a>
+                  <Link className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-200 hover:text-white flex items-center gap-2"
+                    to={`/stats/${it.code}`}>
+                    <BarChart3 size={18} /> Stats
+                  </Link>
+                  <button onClick={() => startEdit(it)}
+                    className="px-4 py-2 rounded-xl bg-indigo-600/70 hover:bg-indigo-600 text-white flex items-center gap-2">
+                    <Pencil size={18} /> Edit
+                  </button>
+                  <button onClick={() => del(it.code)}
+                    className="px-4 py-2 rounded-xl bg-red-600/50 hover:bg-red-600 text-white flex items-center gap-2">
+                    <Trash2 size={18} /> Delete
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
-          {infoMsg && <div className="mb-8 bg-blue-500/20 border border-blue-500/30 text-blue-100 p-5 rounded-2xl flex items-center gap-4 text-xl font-medium animate-pulse"><Info size={32} className="text-blue-400 flex-shrink-0" />{infoMsg}</div>}
-          <div className="bg-slate-900/50 rounded-3xl p-8 border border-white/10 flex flex-col md:flex-row items-center gap-8 mb-8">
-            <div className="flex-1 w-full"><p className="text-sm text-indigo-300 font-bold uppercase tracking-widest mb-3">Link Scurt Generat</p><a href={`${API_BASE}/${shortCode}`} target="_blank" className="text-4xl md:text-5xl font-black text-white hover:text-indigo-400 transition break-all leading-tight">{API_BASE.replace('https://', '')}/{shortCode}</a></div>
-            <button onClick={handleCopy} className={`flex-shrink-0 flex items-center gap-3 px-8 py-6 rounded-2xl font-bold text-xl transition-all shadow-xl transform hover:scale-105 active:scale-95 ${copied ? 'bg-emerald-500 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}>{copied ? <CheckCircle size={28} /> : <Copy size={28} />}{copied ? 'COPIAT!' : 'COPIAZĂ'}</button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-             <div className="bg-white p-6 rounded-3xl flex justify-center items-center shadow-lg transform hover:scale-[1.02] transition"><QRCodeCanvas value={`${API_BASE}/${shortCode}`} size={200} /></div>
-             <div className="bg-gradient-to-br from-indigo-900 to-slate-900 p-8 rounded-3xl border border-indigo-500/30 flex flex-col justify-center items-center text-center shadow-lg group">
-                <BarChart3 size={64} className="text-indigo-400 mb-4 group-hover:scale-110 transition-transform duration-300"/>
-                <h3 className="text-2xl font-bold text-white mb-2">Vezi Statistici & Locație</h3>
-                <p className="text-slate-400 mb-6">Află cine a dat click și de unde.</p>
-                <Link to={`/stats/${shortCode}`} className="bg-white text-indigo-900 px-8 py-3 rounded-xl font-bold text-lg hover:bg-indigo-50 transition w-full">Deschide Raport</Link>
-             </div>
+        )}
+      </div>
+
+      {editing && (
+        <div className="mt-6 bg-indigo-600/15 border border-indigo-500/30 rounded-[2rem] p-6">
+          <h2 className="text-white font-bold text-xl mb-3">Edit /{editing}</h2>
+          <div className="flex flex-col md:flex-row gap-3">
+            <input className="flex-1 p-4 rounded-2xl bg-slate-950/60 border border-white/10 text-white outline-none"
+              value={newUrl} onChange={(e) => setNewUrl(e.target.value)} placeholder="https://..." />
+            <button onClick={saveEdit} className="px-6 py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold">Save</button>
+            <button onClick={() => { setEditing(null); setNewUrl(""); }}
+              className="px-6 py-4 rounded-2xl bg-white/5 border border-white/10 text-slate-200 hover:text-white font-bold">
+              Cancel
+            </button>
           </div>
         </div>
       )}
@@ -119,153 +550,182 @@ function Home() {
   );
 }
 
-// --- PAGINA STATS ---
-function Stats() {
-  const { code } = useParams();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    fetch(`${API_BASE}/api/stats/${code}`).then(res => res.ok ? res.json() : Promise.reject("Eroare")).then(d => { setData(d); setLoading(false); }).catch((err) => { console.error(err); setError("Link inexistent."); setLoading(false); });
-  }, [code]);
-
-  if (loading) return <div className="text-white z-10"><Loader /></div>;
-  if (error) return <div className="z-10 text-white text-center text-2xl">{error}</div>;
-
-  return (
-    // FIX AICI: Am adaugat 'pt-32' ca să împingem conținutul sub meniu
-    <div className="relative z-10 w-full max-w-6xl px-4 animate-fade-in pt-32 pb-10">
-      <Link to="/" className="inline-flex items-center text-indigo-300 hover:text-white mb-8 transition-colors text-lg font-medium bg-white/5 px-6 py-3 rounded-full border border-white/10 relative z-30">
-        <ArrowRight className="rotate-180 mr-3" size={24} /> Înapoi la link-ul meu
-      </Link>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-        <div className="bg-white/5 backdrop-blur-md border border-white/10 p-8 rounded-[2rem] flex items-center gap-6 shadow-xl">
-            <div className="p-5 bg-indigo-500 text-white rounded-3xl shadow-lg shadow-indigo-500/30"><MousePointer2 size={40}/></div>
-            <div><p className="text-slate-400 text-sm font-bold uppercase tracking-wider mb-1">Click-uri Totale</p><p className="text-6xl font-black text-white">{data.visits}</p></div>
-        </div>
-        <div className="bg-indigo-600/20 backdrop-blur-md border border-indigo-500/30 p-8 rounded-[2rem] flex flex-col justify-center shadow-xl">
-             <p className="text-indigo-300 text-sm font-bold uppercase tracking-wider mb-2">Link Scurt Generat</p>
-             <a href={`${API_BASE}/${code}`} target="_blank" className="text-3xl font-bold text-white hover:text-indigo-400 truncate transition flex items-center gap-3"><ExternalLink size={32} /> {API_BASE.replace('https://', '')}/{code}</a>
-        </div>
-      </div>
-      <div className="bg-white/5 backdrop-blur-md border border-white/10 p-8 rounded-[2rem] flex flex-col justify-center shadow-xl mb-8">
-           <p className="text-slate-400 text-sm font-bold uppercase tracking-wider mb-2">Destinație Originală</p>
-           <a href={data.longUrl} target="_blank" className="text-2xl font-bold text-white hover:text-indigo-400 truncate transition flex items-center gap-3"><LinkIcon size={28} /> {data.longUrl}</a>
-      </div>
-      <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl">
-          <div className="p-8 border-b border-white/5 flex justify-between items-center bg-white/5"><h3 className="text-2xl font-bold text-white flex items-center gap-3"><Clock size={28} className="text-indigo-400"/> Istoric Trafic Detaliat</h3><span className="text-sm font-bold bg-green-500/20 text-green-400 px-4 py-2 rounded-xl border border-green-500/20">LIVE UPDATE</span></div>
-          <div className="overflow-x-auto max-h-[600px] overflow-y-auto custom-scrollbar">
-             <table className="w-full text-left border-collapse">
-               <thead className="bg-black/30 text-slate-400 text-sm uppercase tracking-wider sticky top-0 backdrop-blur-md">
-                 <tr><th className="p-6 font-bold">IP Address</th><th className="p-6 font-bold">Locație</th><th className="p-6 font-bold">Data & Ora</th><th className="p-6 font-bold">Browser / OS</th></tr>
-               </thead>
-               <tbody className="divide-y divide-white/5 text-base">
-                 {data.history && data.history.length > 0 ? (
-                   data.history.map((visit, index) => (
-                     <tr key={index} className="hover:bg-white/5 transition duration-150 group">
-                       <td className="p-6 font-mono text-slate-300 flex items-center gap-3"><div className="w-2.5 h-2.5 bg-indigo-500 rounded-full group-hover:scale-125 transition"></div> {visit.ip}</td>
-                       <td className="p-6 text-white font-medium"><div className="flex items-center gap-3"><MapPin size={20} className="text-indigo-400" />{visit.city || 'Unknown'} <span className="text-slate-500">({visit.country})</span></div></td>
-                       <td className="p-6 text-slate-400">{visit.date ? format(new Date(visit.date), 'dd MMM yyyy, HH:mm') : '-'}</td>
-                       <td className="p-6 text-slate-500 max-w-[300px] truncate">{visit.userAgent}</td>
-                     </tr>
-                   ))
-                 ) : ( <tr><td colSpan="4" className="p-16 text-center text-slate-500 text-xl">Niciun click înregistrat încă.</td></tr> )}
-               </tbody>
-             </table>
-          </div>
-      </div>
-    </div>
-  );
-}
-
-// --- ADMIN DASHBOARD ---
+// ---------- ADMIN DASHBOARD ----------
 function AdminDashboard() {
   const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setL] = useState(true);
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/admin/dashboard`).then(res => res.json()).then(d => { setData(d); setLoading(false); }).catch(err => console.error(err));
+    apiFetch("/api/admin/dashboard")
+      .then(({ res, data }) => {
+        if (!res?.ok) setData({ error: data?.error || "Eroare" });
+        else setData(data);
+        setL(false);
+      })
+      .catch(() => setL(false));
   }, []);
 
-  if (loading) return <div className="text-white z-10"><Loader /></div>;
+  if (loading) return <div className="relative z-10 pt-28 text-white"><Loader /></div>;
+  if (!data || data.error) return <div className="relative z-10 pt-28 text-white text-center text-2xl">{data?.error || "Eroare"}</div>;
 
   return (
-    // FIX AICI: Am adaugat 'pt-32' și aici
-    <div className="relative z-10 w-full max-w-7xl px-6 animate-fade-in pt-32 pb-10">
-      <Link to="/" className="inline-flex items-center text-indigo-300 hover:text-white mb-8 transition-colors text-lg font-medium bg-white/5 px-6 py-3 rounded-full border border-white/10 relative z-30">
-        <ArrowRight className="rotate-180 mr-3" size={24} /> Înapoi acasă
-      </Link>
-      
-      <h1 className="text-4xl font-black text-white mb-8 flex items-center gap-3"><LayoutDashboard size={40} className="text-indigo-400"/> Admin Dashboard</h1>
-      
+    <div className="relative z-10 w-full max-w-7xl px-4 pt-28 pb-10">
+      <h1 className="text-4xl font-black text-white mb-8 flex items-center gap-2">
+        <LayoutDashboard className="text-indigo-300" /> Admin Dashboard
+      </h1>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div className="bg-indigo-600/20 border border-indigo-500/30 p-8 rounded-[2rem] flex flex-col justify-center">
-           <p className="text-indigo-300 text-sm font-bold uppercase tracking-wider mb-2">Total Link-uri Create</p>
-           <p className="text-6xl font-black text-white">{data.totalLinks}</p>
+        <div className="bg-indigo-600/20 border border-indigo-500/30 p-8 rounded-[2rem]">
+          <p className="text-indigo-200 text-sm font-bold uppercase tracking-wider mb-2">Total link-uri</p>
+          <p className="text-6xl font-black text-white">{data.totalLinks}</p>
         </div>
-        <div className="bg-emerald-600/10 border border-emerald-500/30 p-8 rounded-[2rem] flex flex-col justify-center">
-           <p className="text-emerald-300 text-sm font-bold uppercase tracking-wider mb-2">Total Vizite Platformă</p>
-           <p className="text-6xl font-black text-white">{data.totalVisits}</p>
+        <div className="bg-emerald-600/10 border border-emerald-500/30 p-8 rounded-[2rem]">
+          <p className="text-emerald-200 text-sm font-bold uppercase tracking-wider mb-2">Total vizite</p>
+          <p className="text-6xl font-black text-white">{data.totalVisits}</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        <div className="bg-slate-900/60 border border-white/10 rounded-[2.5rem] p-8">
-           <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2"><TrendingUp className="text-yellow-400"/> Cele mai accesate link-uri</h3>
-           <div className="space-y-4">
-             {data.topLinks.map((link) => (
-               <div key={link.code} className="flex justify-between items-center bg-white/5 p-4 rounded-xl border border-white/5">
-                 <div className="truncate pr-4"><div className="text-indigo-400 font-bold text-lg mb-1">/{link.code}</div><div className="text-slate-500 text-xs truncate max-w-[200px]">{link.longUrl}</div></div>
-                 <div className="text-2xl font-black text-white">{link.visits} <span className="text-xs font-normal text-slate-500">vizite</span></div>
-               </div>
-             ))}
-           </div>
+        <div className="bg-slate-900/60 border border-white/10 rounded-[2rem] p-8">
+          <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+            <TrendingUp className="text-yellow-300" /> Top link-uri
+          </h3>
+          <div className="space-y-4">
+            {(data.topLinks || []).map((l) => (
+              <div key={l.code} className="flex justify-between items-center bg-white/5 p-4 rounded-xl border border-white/10">
+                <div className="truncate pr-4">
+                  <div className="text-indigo-300 font-bold text-lg">/{l.code}</div>
+                  <div className="text-slate-500 text-xs truncate max-w-[340px]">{l.longUrl}</div>
+                  <div className="text-slate-600 text-xs">Owner: {l.owner}</div>
+                </div>
+                <div className="text-2xl font-black text-white">
+                  {l.visits} <span className="text-xs font-normal text-slate-500">vizite</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-        <div className="bg-slate-900/60 border border-white/10 rounded-[2.5rem] p-8 flex flex-col">
-           <h3 className="text-xl font-bold text-white mb-6">Vizite (7 zile)</h3>
-           <div className="flex-1 min-h-[300px]">
-             <ResponsiveContainer width="100%" height="100%">
-               <BarChart data={data.chartData}>
-                 <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-                 <Tooltip contentStyle={{backgroundColor: '#1e293b', border: 'none', borderRadius: '12px', color: '#fff'}} />
-                 <Bar dataKey="visits" fill="#6366f1" radius={[6, 6, 0, 0]} barSize={40} />
-               </BarChart>
-             </ResponsiveContainer>
-           </div>
+
+        <div className="bg-slate-900/60 border border-white/10 rounded-[2rem] p-8 flex flex-col">
+          <h3 className="text-xl font-bold text-white mb-6">Vizite (7 zile)</h3>
+          <div className="flex-1 min-h-[280px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data.chartData || []}>
+                <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
+                <Tooltip contentStyle={{ backgroundColor: "#0f172a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12 }} />
+                <Bar dataKey="visits" fill="#6366f1" radius={[8, 8, 0, 0]} barSize={36} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
 
-      <div className="bg-slate-900/60 border border-white/10 rounded-[2.5rem] p-8">
-         <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2"><Globe className="text-blue-400"/> Top Țări</h3>
-         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {data.geoData.map((geo) => (
-              <div key={geo.name} className="bg-white/5 p-4 rounded-xl border border-white/5 flex items-center justify-between">
-                 <span className="text-slate-300 font-medium">{geo.name}</span>
-                 <span className="text-white font-bold bg-indigo-500/20 px-2 py-1 rounded text-sm">{geo.value} vizite</span>
-              </div>
-            ))}
-            {data.geoData.length === 0 && <p className="text-slate-500">Încă nu sunt date geografice.</p>}
-         </div>
+      <div className="bg-slate-900/60 border border-white/10 rounded-[2rem] p-8">
+        <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+          <Globe className="text-sky-300" /> Distribuție geo (top)
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {(data.geoData || []).map((g) => (
+            <div key={g.name} className="bg-white/5 p-4 rounded-xl border border-white/10 flex items-center justify-between">
+              <span className="text-slate-200 font-medium">{g.name}</span>
+              <span className="text-white font-bold bg-indigo-500/20 px-2 py-1 rounded text-sm">{g.value}</span>
+            </div>
+          ))}
+          {(data.geoData || []).length === 0 && <p className="text-slate-500">Încă nu sunt date.</p>}
+        </div>
       </div>
     </div>
   );
 }
 
-// --- APP ROOT ---
+// ---------- ROOT ----------
 export default function App() {
+  const [authed, setAuthed] = useState(!!getToken());
+  const [role, setRole] = useState(null);
+
+  const [dashKey, setDashKey] = useState(0);
+  const bumpDashboard = () => setDashKey((k) => k + 1);
+
+  const [pendingCount, setPendingCount] = useState(0);
+
+  const refreshPendingCount = async () => {
+    const n = await countPending();
+    setPendingCount(n);
+  };
+
+  const onLogout = () => {
+    clearToken();
+    setAuthed(false);
+    setRole(null);
+  };
+
+  // ✅ sync când revii online + la refresh (dacă există net)
+  useEffect(() => {
+    const handleOnline = async () => {
+      await syncPendingShortens({
+        onItemSynced: () => bumpDashboard(),
+        onDone: () => refreshPendingCount(),
+      });
+    };
+
+    window.addEventListener("online", handleOnline);
+
+    // refresh: număr cereri în coadă
+    refreshPendingCount();
+
+    // dacă e online, încercăm sync imediat
+    if (navigator.onLine) handleOnline();
+
+    return () => window.removeEventListener("online", handleOnline);
+  }, []);
+
+  // ✅ păstrează role-ul
+  useEffect(() => {
+    if (!getToken()) return;
+    apiFetch("/api/auth/me").then(({ res, data }) => {
+      if (!res?.ok) { clearToken(); setAuthed(false); setRole(null); return; }
+      setAuthed(true);
+      setRole(data.role);
+    });
+  }, []);
+
+  // recalculăm pending când se schimbă dashboardul (după enqueue / sync)
+  useEffect(() => {
+    refreshPendingCount();
+  }, [dashKey]);
+
   return (
     <BrowserRouter>
-      <div className="relative min-h-screen flex flex-col items-center justify-center font-sans selection:bg-indigo-500 selection:text-white overflow-x-hidden">
+      <div className="relative min-h-screen flex flex-col items-center font-sans overflow-x-hidden">
         <Background />
-        <Navbar />
+        <Navbar authed={authed} role={role} onLogout={onLogout} />
+
         <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/stats/:code" element={<Stats />} />
-          <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/login" element={<Login onAuth={setAuthed} onRole={setRole} />} />
+          <Route path="/register" element={<Register onAuth={setAuthed} onRole={setRole} />} />
+
+          <Route path="/" element={
+            <ProtectedRoute>
+              <Home bumpDashboard={bumpDashboard} pendingCount={pendingCount} />
+            </ProtectedRoute>
+          } />
+          <Route path="/dashboard" element={<ProtectedRoute><Dashboard refreshKey={dashKey} /></ProtectedRoute>} />
+          <Route path="/stats/:code" element={<ProtectedRoute><Stats /></ProtectedRoute>} />
+
+          <Route path="/admin" element={
+            <ProtectedRoute>
+              <AdminRoute role={role}>
+                <AdminDashboard />
+              </AdminRoute>
+            </ProtectedRoute>
+          } />
+
+          <Route path="*" element={<Navigate to={authed ? "/" : "/login"} replace />} />
         </Routes>
-        <footer className="absolute bottom-6 text-slate-600 text-sm z-10 font-medium">© 2025 Feaa Link Pro.</footer>
+
+        <footer className="text-slate-600 text-sm z-10 font-medium pb-6">
+          © {new Date().getFullYear()} ShortUrl Premium
+        </footer>
       </div>
     </BrowserRouter>
   );
