@@ -42,10 +42,6 @@ export async function apiFetch(path, options = {}) {
 
     return { res, data, networkError: false };
   } catch (e) {
-    return {
-      res: null,
-      data: { error: e?.message || "fetch failed" },
-      networkError: true,
-    };
+    return { res: null, data: { error: e?.message || "fetch failed" }, networkError: true };
   }
 }
