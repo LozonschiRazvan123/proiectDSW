@@ -22,9 +22,8 @@ app.set("trust proxy", true);
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 
-// dacă lipsește ceva, e mai bine să știm imediat
 if (!UPSTASH_URL || !UPSTASH_TOKEN) {
-  console.warn("⚠️ Lipsesc UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN în .env");
+  console.warn(" Lipsesc UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN în .env");
 }
 
 const redis = new Redis({
@@ -32,17 +31,16 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-// ---------- Helpers ----------
 const jsonSet = async (key, value) => redis.set(key, JSON.stringify(value));
 
 const jsonGet = async (key) => {
   const v = await redis.get(key);
   if (!v) return null;
-  if (typeof v === "object") return v; // Upstash sometimes returns objects
+  if (typeof v === "object") return v;
   try {
     return JSON.parse(v);
   } catch {
-    return v; // legacy string case
+    return v;
   }
 };
 
@@ -77,17 +75,12 @@ const adminOnly = (req, res, next) => {
 const hashUserUrl = (username, longUrl) =>
   crypto.createHash("sha256").update(`${username}:${longUrl}`).digest("hex");
 
-/**
- * Normalizează valoarea din Redis pentru short:<code>
- * - dacă e string (legacy), o transformă în obiect și o salvează înapoi
- * - dacă e obiect, îl returnează
- */
+
 const getShortObject = async (code, fallbackOwner = null) => {
   const key = `short:${code}`;
   const raw = await jsonGet(key);
   if (!raw) return null;
 
-  // Legacy format: "https://..."
   if (typeof raw === "string") {
     const obj = {
       longUrl: raw,
@@ -101,7 +94,6 @@ const getShortObject = async (code, fallbackOwner = null) => {
     return obj;
   }
 
-  // If somehow missing fields, patch them
   const patched = {
     longUrl: raw.longUrl ?? raw.url ?? "",
     owner: raw.owner ?? fallbackOwner ?? "unknown",
@@ -111,7 +103,6 @@ const getShortObject = async (code, fallbackOwner = null) => {
     deletedAt: raw.deletedAt ?? null,
   };
 
-  // if patch changed structure, persist
   const needPersist =
     patched.longUrl !== raw.longUrl ||
     patched.owner !== raw.owner ||
@@ -124,7 +115,6 @@ const getShortObject = async (code, fallbackOwner = null) => {
 
 app.get("/", (_, res) => res.send("✅ Backend ONLINE"));
 
-// ---------- AUTH ----------
 app.post("/api/auth/register", async (req, res) => {
   try {
     const { username, password } = req.body || {};
@@ -164,7 +154,6 @@ app.post("/api/auth/login", async (req, res) => {
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) return res.status(401).json({ error: "Credențiale invalide" });
 
-    // promote if username is now in ADMIN_USERS
     const role = roleFor(username);
     if (user.role !== role) {
       user.role = role;
@@ -183,7 +172,6 @@ app.get("/api/auth/me", auth, async (req, res) => {
   res.json({ username: req.user.username, role: req.user.role });
 });
 
-// ---------- SHORTEN (authed) ----------
 app.post("/api/shorten", auth, async (req, res) => {
   try {
     const { longUrl } = req.body || {};
@@ -198,11 +186,9 @@ app.post("/api/shorten", auth, async (req, res) => {
     if (existingCode) {
       const existingData = await getShortObject(existingCode, username);
 
-      // dacă nu există în Redis (mapping corupt), curățăm mappingul și continuăm ca new
       if (!existingData) {
         await redis.del(`url:byUserLong:${h}`);
       } else {
-        // ✅ dacă e dezactivat -> reactivăm + re-adăugăm în dashboard
         if (existingData.active === false) {
           existingData.active = true;
           existingData.deletedAt = null;
@@ -220,7 +206,6 @@ app.post("/api/shorten", auth, async (req, res) => {
           });
         }
 
-        // ✅ dacă e activ -> asigură-te că e în set (dashboard)
         await redis.sadd(`user:links:${existingData.owner || username}`, existingCode);
 
         return res.json({
@@ -231,7 +216,6 @@ app.post("/api/shorten", auth, async (req, res) => {
       }
     }
 
-    // create new
     const shortCode = nanoid(6);
 
     await jsonSet(`short:${shortCode}`, {
@@ -254,7 +238,6 @@ app.post("/api/shorten", auth, async (req, res) => {
   }
 });
 
-// ---------- USER DASHBOARD CRUD ----------
 app.get("/api/user/links", auth, async (req, res) => {
   try {
     const username = req.user.username;
@@ -265,9 +248,6 @@ app.get("/api/user/links", auth, async (req, res) => {
         const data = await getShortObject(code, username);
         if (!data) return null;
 
-        // Dacă vrei să NU afișezi dezactivatele, lasă filtrarea.
-        // Dacă vrei să le vezi în dashboard (cu status), poți returna active și să le afișezi în UI.
-        // Eu le ascund (default), fiind “soft deleted”.
         if (data.active === false) return null;
 
         const visits = parseInt((await redis.get(`stats:${code}`)) || "0", 10);
@@ -330,7 +310,6 @@ app.delete("/api/user/links/:code", auth, async (req, res) => {
     data.updatedAt = new Date().toISOString();
     await jsonSet(`short:${code}`, data);
 
-    // îl scoatem din dashboard
     await redis.srem(`user:links:${data.owner}`, code);
 
     res.json({ ok: true, softDeleted: true });
@@ -340,7 +319,7 @@ app.delete("/api/user/links/:code", auth, async (req, res) => {
   }
 });
 
-// ---------- STATS (owner OR admin) ----------
+
 app.get("/api/stats/:code", auth, async (req, res) => {
   try {
     const { code } = req.params;
@@ -368,7 +347,6 @@ app.get("/api/stats/:code", auth, async (req, res) => {
   }
 });
 
-// ---------- ADMIN DASHBOARD (admin only) ----------
 app.get("/api/admin/dashboard", auth, adminOnly, async (req, res) => {
   try {
     const keys = await redis.keys("short:*");
@@ -434,7 +412,6 @@ app.get("/api/admin/dashboard", auth, adminOnly, async (req, res) => {
   }
 });
 
-// ---------- REDIRECT + TRACK (public) ----------
 app.get("/:code", async (req, res) => {
   try {
     const { code } = req.params;
@@ -489,7 +466,6 @@ app.get("/:code", async (req, res) => {
   }
 });
 
-//app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
 export { app };
 
 if (process.env.NODE_ENV !== "test") {

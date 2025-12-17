@@ -27,7 +27,6 @@ export async function apiFetch(path, options = {}) {
 
     return { res, data, networkError: false };
   } catch (e) {
-    // ✅ aici intră când apare "TypeError: fetch failed"
     return { res: null, data: { error: e?.message || "fetch failed" }, networkError: true };
   }
 }
