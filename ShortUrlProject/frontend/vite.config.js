@@ -5,12 +5,11 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   define: {
-    // dacă undeva în cod/bundle apare SyncedNavigator, îl înlocuiește cu navigator
-    SyncedNavigator: "navigator",
+    SyncedNavigator: "window.navigator",
   },
   test: {
     environment: "jsdom",
     globals: true,
-    setupFiles: "./src/test/setup.js",
-  },
+    setupFiles: "./src/test/setup.js"
+  }
 });
