@@ -1,0 +1,1 @@
+var SyncedNavigator = window.navigator;
