@@ -15,7 +15,13 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || "change_me";
 
-app.use(cors());
+app.use(cors({
+  origin: [
+    "http://localhost:5173",
+    "https://lucky-muffin-b22166.netlify.app"
+  ],
+  credentials: true
+}));
 app.use(express.json());
 app.set("trust proxy", true);
 

@@ -1,19 +1,7 @@
-const PROD_FALLBACK = "https://proiectdsw.onrender.com";
-const DEV_FALLBACK = "http://localhost:5000";
+// ✅ URL-ul este setat direct pe producție (Render)
+const API_BASE = "https://proiectdsw.onrender.com";
 
-const normalizeBase = (base) => (base || "").replace(/\/+$/, "");
-
-export const getApiBase = () => {
-  const fromEnv = normalizeBase(import.meta.env.VITE_API_BASE);
-  if (fromEnv) return fromEnv;
-
-  if (typeof window !== "undefined") {
-    const host = window.location.hostname;
-    if (host === "localhost" || host === "127.0.0.1") return DEV_FALLBACK;
-  }
-
-  return PROD_FALLBACK;
-};
+export const getApiBase = () => API_BASE;
 
 export const getToken = () => localStorage.getItem("token");
 export const setToken = (t) => localStorage.setItem("token", t);
