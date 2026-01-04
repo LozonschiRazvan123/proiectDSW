@@ -18,12 +18,15 @@ const JWT_SECRET = process.env.JWT_SECRET || "change_me";
 app.use(cors({
   origin: [
     "http://localhost:5173",
-    "https://lucky-muffin-b22166.netlify.app"
+    "https://lucky-muffin-b22166.netlify.app",
+    "https://s-six-ruddy.vercel.app",
+    "https://url-shortner-fe-two.vercel.app" // <- pui domeniul tău real de Vercel
   ],
-  credentials: true
+  credentials: false
 }));
+
+
 app.use(express.json());
-app.set("trust proxy", true);
 
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
